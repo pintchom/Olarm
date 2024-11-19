@@ -2,9 +2,9 @@
 A dual micro-controller alarm clock that only shuts up when you physically lift your toothbrush from its stand 
 
 # Parts
-2x Raspberry pi pico W 
-1x Mono jack speaker 
-1x Magnetic latch 
+- 2x Raspberry pi pico W
+- 1x Mono jack speaker 
+- 1x Magnetic latch 
 
 # CircuitPython Sound Server Component
 
