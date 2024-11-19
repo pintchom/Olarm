@@ -1,31 +1,22 @@
-# ALARM-CONTROLLER
-# alarm-controller.py
+# TOOTHBRUSH - CONTROLLER
+# toothbrush-controller.py
 # Max Pintchouk
-import board
-import os
-import time
+import board, time
 import wifi
 import socketpool
-import supervisor
-from adafruit_httpserver import Server, Request, Response
 import adafruit_requests
+import os
+import wifi
+from adafruit_httpserver import Server, Request, Response
+import supervisor
 
-################################################################################################################
-''' Audio setup '''
-from audiopwmio import PWMAudioOut as AudioOut
-from audiocore import WaveFile
-audio = AudioOut(board.GP15)
-################################################################################################################
-'''Constants'''
-RECIEVER_URL = "http://10.20.69.162/"
-pool = None
-################################################################################################################
-
-def send_alarm_time():
+HOST_URL = "http://10.20.77.240/"
+def request_alarm():
     print("Requesting alarm")
     try:
         requests = adafruit_requests.Session(pool)
-        response = requests.get(RECIEVER_URL + "gather-time")
+        response = requests.get(HOST_URL + "play")
+
         print("Response status code:", response.status_code)
         print("Response text:", response.text)
 
@@ -36,21 +27,9 @@ def send_alarm_time():
         print("Error making request:", str(e))
         return None
 
-################################################################################################################
-'''Function to play sound'''
-def play_sound():
-    print("PLAYING SOUND")
-    try:
-        with open("no-id.wav", "rb") as wave_file:
-            wave = WaveFile(wave_file)
-            audio.play(wave)
-            while audio.playing:
-                pass
-    except Exception as e:
-        print(f"Error playing sound: {e}")
-################################################################################################################
 
-
+pool = None
+time_to_detonate = None
 def connect_to_wifi():
     global pool
     max_attempts = 3
@@ -79,20 +58,16 @@ def setup_server():
             print("Received request to root")
             return Response(request, "Server is running!")
 
-        @server.route("/play")
-        def play_route(request: Request):
-            print("Received request to play sound")
-            play_sound()
-            print("Finished playing sound")
+        @server.route("/gather-time")
+        def play_route(request: Request, methods=["GET"]):
+            print("Recieving time")
             return Response(request, "Sound played!")
-
         return server
     except Exception as e:
         print(f"Server setup failed: {e}")
         return None
 
 def run_server():
-    # Connect to WiFi
     if not connect_to_wifi():
         print("Failed to connect to WiFi after multiple attempts")
         supervisor.reload()
@@ -110,7 +85,7 @@ def run_server():
         print(f"Server is running on http://{wifi.radio.ipv4_address}")
         print("Available routes:")
         print(f"  http://{wifi.radio.ipv4_address}/")
-        print(f"  http://{wifi.radio.ipv4_address}/play")
+        print(f"  http://{wifi.radio.ipv4_address}/gather-time")
 
         while True:
             server.poll()
