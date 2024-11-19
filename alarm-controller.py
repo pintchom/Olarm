@@ -65,7 +65,7 @@ def setup_server():
         print(f"Server setup failed: {e}")
         return None
 
-def main():
+def run_server():
     # Connect to WiFi
     if not connect_to_wifi():
         print("Failed to connect to WiFi after multiple attempts")
@@ -95,5 +95,4 @@ def main():
         supervisor.reload()
 
 # Start the program
-if __name__ == "__main__":
-    main()
+run_server()
