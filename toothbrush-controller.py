@@ -1,7 +1,8 @@
 # TOOTHBRUSH - CONTROLLER
 # toothbrush-controller.py
 # Max Pintchouk
-import board, time
+import board, time, digitalio
+from adafruit_debouncer import Button
 import wifi
 import socketpool
 import adafruit_requests
@@ -10,7 +11,11 @@ import wifi
 from adafruit_httpserver import Server, Request, Response
 import supervisor
 
-HOST_URL = "http://10.20.77.240/"
+button_A_input = digitalio.DigitalInOut(board.GP15)
+button_A_input.switch_to_input(digitalio.Pull.UP) # Note: Pull.UP for external buttons
+button_A = Button(button_A_input, value_when_pressed = True) # NOTE: False 
+
+HOST_URL = "http://10.20.66.107/"
 def request_alarm():
     print("Requesting alarm")
     try:
@@ -48,50 +53,9 @@ def connect_to_wifi():
             time.sleep(2)
     return False
 
-def setup_server():
-    try:
-        pool = socketpool.SocketPool(wifi.radio)
-        server = Server(pool, "/static", debug=True)
-
-        @server.route("/")
-        def base(request: Request):
-            print("Received request to root")
-            return Response(request, "Server is running!")
-
-        @server.route("/gather-time")
-        def play_route(request: Request, methods=["GET"]):
-            print("Recieving time")
-            return Response(request, "Sound played!")
-        return server
-    except Exception as e:
-        print(f"Server setup failed: {e}")
-        return None
-
-def run_server():
-    if not connect_to_wifi():
-        print("Failed to connect to WiFi after multiple attempts")
-        supervisor.reload()
-        return
-
-    server = setup_server()
-    if not server:
-        print("Failed to setup server")
-        supervisor.reload()
-        return
-
-    try:
-        print("Starting server...")
-        server.start(port=80)
-        print(f"Server is running on http://{wifi.radio.ipv4_address}")
-        print("Available routes:")
-        print(f"  http://{wifi.radio.ipv4_address}/")
-        print(f"  http://{wifi.radio.ipv4_address}/gather-time")
-
-        while True:
-            server.poll()
-            time.sleep(0.1)
-    except Exception as e:
-        print(f"Server error: {e}")
-        supervisor.reload()
-
-run_server()
+connect_to_wifi()
+while True:
+    button_A.update()
+    if button_A.pressed:
+        print("Detected press")
+        request_alarm()
