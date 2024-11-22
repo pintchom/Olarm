@@ -11,16 +11,15 @@ import wifi
 from adafruit_httpserver import Server, Request, Response
 import supervisor
 
-button_A_input = digitalio.DigitalInOut(board.GP15)
-button_A_input.switch_to_input(digitalio.Pull.UP) # Note: Pull.UP for external buttons
-button_A = Button(button_A_input, value_when_pressed = True) # NOTE: False 
+door_sensor = digitalio.DigitalInOut(board.GP14)
+door_sensor.switch_to_input(pull=digitalio.Pull.UP)
 
-HOST_URL = "http://10.20.66.107/"
-def request_alarm():
-    print("Requesting alarm")
+HOST_URL = "http://10.20.81.170/"
+def request_stop_alarm():
+    print("Requesting stop alarm")
     try:
         requests = adafruit_requests.Session(pool)
-        response = requests.get(HOST_URL + "play")
+        response = requests.get(HOST_URL + "stop-alarm")
 
         print("Response status code:", response.status_code)
         print("Response text:", response.text)
@@ -55,7 +54,6 @@ def connect_to_wifi():
 
 connect_to_wifi()
 while True:
-    button_A.update()
-    if button_A.pressed:
-        print("Detected press")
-        request_alarm()
+    if door_sensor.value:
+        print("Detected magnet")
+        request_stop_alarm()

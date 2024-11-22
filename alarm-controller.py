@@ -9,17 +9,69 @@ import socketpool
 import supervisor
 from adafruit_httpserver import Server, Request, Response
 import adafruit_requests
+import rtc
+import circuitpython_schedule as schedule
+import ssl
+
+################################################################################################################
+'''Constants'''
+RECIEVER_URL = "http://10.20.69.162/"
+pool = None
+requests = None
+server = None
+################################################################################################################
+''' TIMER setup '''
+alarm_times = ["10:48:00"]  # Added seconds for more precise timing
+clock = rtc.RTC()
+url = "http://worldtimeapi.org/api/timezone/"  # Changed to http instead of https
+timezone = "America/New_York"
+url = url + timezone
+alarm_active = False
+last_alarm_time = None  # Track when the last alarm was triggered
+
+def get_time():
+    print(f"Accessing url: {url}")
+    response = requests.get(url)
+
+    # convert response into json
+    json = response.json()
+
+    # parse out values that we want
+    unixtime = json["unixtime"]
+    raw_offset = json["raw_offset"]
+
+    # create the local time in seconds
+    location_time = unixtime + raw_offset
+
+    # turn seconds into time components
+    current_time = time.localtime(location_time)
+
+    # format and print time & date
+    printable_time = f"{current_time.tm_hour:d}:{current_time.tm_min:02d}:{current_time.tm_sec:02d}"
+    printable_date = f"{current_time.tm_mon:d}/{current_time.tm_mday:d}/{current_time.tm_year:02d}"
+    print(f"printable_time: {printable_time}")
+    print(f"printable_date: {printable_date}")
+
+    # set the rtc with the component time in current_time
+    clock.datetime = time.struct_time(current_time)
+
+def check_alarm():
+    global last_alarm_time
+    current = time.localtime()
+    current_time = f"{current.tm_hour}:{current.tm_min:02d}:{current.tm_sec:02d}"
+    
+    if (current_time in alarm_times and 
+        not alarm_active and 
+        last_alarm_time != current_time):
+        last_alarm_time = current_time
+        play_sound()
 
 ################################################################################################################
 ''' Audio setup '''
 from audiopwmio import PWMAudioOut as AudioOut
 from audiocore import WaveFile
 audio = AudioOut(board.GP15)
-################################################################################################################
-'''Constants'''
-RECIEVER_URL = "http://10.20.69.162/"
-pool = None
-################################################################################################################
+
 
 def send_alarm_time():
     print("Requesting alarm")
@@ -39,20 +91,39 @@ def send_alarm_time():
 ################################################################################################################
 '''Function to play sound'''
 def play_sound():
+    global alarm_active
     print("PLAYING SOUND")
     try:
+        alarm_active = True
         with open("siren.wav", "rb") as wave_file:
             wave = WaveFile(wave_file)
-            audio.play(wave)
-            while audio.playing:
-                pass
+            while True:
+                if not alarm_active:
+                    break
+                audio.play(wave)
+                while audio.playing:
+                    server.poll()
+                    if not alarm_active:
+                        break
+                    time.sleep(0.1)  # Small delay to prevent CPU hogging
+                audio.stop()
     except Exception as e:
         print(f"Error playing sound: {e}")
-################################################################################################################
+        alarm_active = False
 
+def stop_sound():
+    global alarm_active
+    print("Stopping alarm...")
+    alarm_active = False  # Set flag first
+    if audio.playing:
+        audio.stop()
+    print("Alarm stopped")
+    time.sleep(1)  # Reduced sleep time
+################################################################################################################
 
 def connect_to_wifi():
     global pool
+    global requests
     max_attempts = 3
     attempt = 0
     
@@ -78,6 +149,7 @@ def connect_to_wifi():
     return False
 
 def setup_server():
+    global server
     try:
         global pool  # Use the global pool instead of creating a new one
         if pool is None:
@@ -92,12 +164,11 @@ def setup_server():
             print("Received request to root")
             return Response(request, "Server is running!")
 
-        @server.route("/play")
-        def play_route(request: Request):
-            print("Received request to play sound")
-            play_sound()
-            print("Finished playing sound")
-            return Response(request, "Sound played!")
+        @server.route("/stop-alarm")
+        def stop_route(request: Request):
+            print("Received request to stop alarm")
+            stop_sound()
+            return Response(request, "Alarm stopped!")
 
         print("Routes configured successfully")
         return server
@@ -128,11 +199,15 @@ def run_server():
         print(f"Server is running on http://{wifi.radio.ipv4_address}")
         print("Available routes:")
         print(f"  http://{wifi.radio.ipv4_address}/")
-        print(f"  http://{wifi.radio.ipv4_address}/play")
+        print(f"  http://{wifi.radio.ipv4_address}/stop-alarm")
+
+        # Get initial time
+        get_time()
 
         while True:
             try:
                 server.poll()
+                check_alarm()  # Check if it's time for alarm
                 time.sleep(0.1)
             except Exception as e:
                 print(f"Error in server poll: {str(e)}")
